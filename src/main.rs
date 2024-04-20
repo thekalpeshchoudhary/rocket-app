@@ -2,16 +2,33 @@
 extern crate rocket;
 
 mod auth;
+mod models;
+mod schema;
 
 use auth::BasicAuth;
+use diesel::prelude::*;
+use models::Rustaceans;
 use rocket::{
     response::status,
     serde::json::{json, Value},
 };
+use rocket_sync_db_pools::database;
+use schema::rustaceans::{self, table};
+
+#[database("psql")]
+struct DbConnection(diesel::PgConnection);
 
 #[get("/rustaceans")]
-fn get_rustaceans(_auth: BasicAuth) -> Value {
-    json!([{"id":1, "name":"Kalpesh"}, {"id":2, "name":"KC"}])
+async fn get_rustaceans(_auth: BasicAuth, db: DbConnection) -> Value {
+    db.run(|c| {
+        let rustaceans = rustaceans::table
+            .order(rustaceans::id.desc())
+            .limit(1000)
+            .load::<Rustaceans>(c)
+            .expect("DB Error");
+        json!(rustaceans)
+    })
+    .await
 }
 
 #[get("/rustaceans/<id>")]
@@ -66,6 +83,7 @@ async fn main() {
             "/",
             catchers![not_found, unauthorized, internal_server_error],
         )
+        .attach(DbConnection::fairing())
         .launch()
         .await;
 }

@@ -7,13 +7,13 @@ mod schema;
 
 use auth::BasicAuth;
 use diesel::prelude::*;
-use models::Rustaceans;
+use models::{NewRustacean, Rustaceans};
 use rocket::{
     response::status,
-    serde::json::{json, Value},
+    serde::json::{json, Json, Value},
 };
 use rocket_sync_db_pools::database;
-use schema::rustaceans::{self, table};
+use schema::rustaceans;
 
 #[database("psql")]
 struct DbConnection(diesel::PgConnection);
@@ -24,7 +24,8 @@ async fn get_rustaceans(_auth: BasicAuth, db: DbConnection) -> Value {
         let rustaceans = rustaceans::table
             .order(rustaceans::id.desc())
             .limit(1000)
-            .load::<Rustaceans>(c)
+            .select(Rustaceans::as_select())
+            .load(c)
             .expect("DB Error");
         json!(rustaceans)
     })
@@ -36,9 +37,20 @@ fn view_rustaeans(id: i32, _auth: BasicAuth) -> Value {
     json!({"id":id, "name":"Kalpesh", "email":"kalpesh@gmail.com"})
 }
 
-#[post("/rustaceans", format = "json")]
-fn create_rustaceans(_auth: BasicAuth) -> Value {
-    json!({"id":3, "name":"John Doe", "email":"john@example.com"})
+#[post("/rustaceans", format = "json", data = "<new_rustacean>")]
+async fn create_rustaceans(
+    _auth: BasicAuth,
+    db: DbConnection,
+    new_rustacean: Json<NewRustacean>,
+) -> Value {
+    db.run(|c| {
+        let result = diesel::insert_into(rustaceans::table)
+            .values(new_rustacean.into_inner())
+            .execute(c)
+            .expect("DB insertion failed!");
+        json!(result)
+    })
+    .await
 }
 
 #[put("/rustaceans/<id>", format = "json")]

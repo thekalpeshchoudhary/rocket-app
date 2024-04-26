@@ -78,6 +78,11 @@ fn internal_server_error() -> Value {
     json!("Internal Server Error")
 }
 
+#[catch(422)]
+fn unprocessable_entity() -> Value {
+    json!("Unable to Process Request")
+}
+
 #[rocket::main]
 async fn main() {
     let _ = rocket::build()
@@ -93,7 +98,12 @@ async fn main() {
         )
         .register(
             "/",
-            catchers![not_found, unauthorized, internal_server_error],
+            catchers![
+                not_found,
+                unauthorized,
+                internal_server_error,
+                unprocessable_entity
+            ],
         )
         .attach(DbConnection::fairing())
         .launch()

@@ -14,3 +14,4 @@ diesel = { version = "2.0", features = ["postgres", "r2d2"] }
 rocket_sync_db_pools = { version = "0.1.0-rc", features = [
     "diesel_postgres_pool",
 ] }
+diesel_migrations = "2.0"

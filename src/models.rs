@@ -1,8 +1,8 @@
 use crate::schema::rustaceans;
-use diesel::{prelude::Insertable, Queryable, Selectable};
+use diesel::{prelude::Insertable, AsChangeset, Queryable, Selectable};
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Queryable, Selectable)]
+#[derive(Serialize, Deserialize, Queryable, AsChangeset, Selectable)]
 #[diesel(table_name = rustaceans)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct Rustaceans {

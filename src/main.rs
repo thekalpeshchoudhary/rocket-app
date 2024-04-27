@@ -33,8 +33,15 @@ async fn get_rustaceans(_auth: BasicAuth, db: DbConnection) -> Value {
 }
 
 #[get("/rustaceans/<id>")]
-fn view_rustaeans(id: i32, _auth: BasicAuth) -> Value {
-    json!({"id":id, "name":"Kalpesh", "email":"kalpesh@gmail.com"})
+async fn view_rustaeans(id: i32, _auth: BasicAuth, db: DbConnection) -> Value {
+    db.run(move |c| {
+        let rustacean = rustaceans::table
+            .find(id)
+            .get_result::<Rustaceans>(c)
+            .expect("DB error when selecting rustacean");
+        json!(rustacean)
+    })
+    .await
 }
 
 #[post("/rustaceans", format = "json", data = "<new_rustacean>")]
@@ -53,14 +60,32 @@ async fn create_rustaceans(
     .await
 }
 
-#[put("/rustaceans/<id>", format = "json")]
-fn update_rustaceans(id: i32, _auth: BasicAuth) -> Value {
-    json!({"id":id, "name":"Max", "email":"max@example.com"})
+#[put("/rustaceans/<id>", format = "json", data = "<rustacean>")]
+async fn update_rustaceans(
+    id: i32,
+    _auth: BasicAuth,
+    db: DbConnection,
+    rustacean: Json<Rustaceans>,
+) -> Value {
+    db.run(move |c| {
+        let result = diesel::update(rustaceans::table.find(id))
+            .set(rustacean.into_inner())
+            .execute(c)
+            .expect("DB update failed!");
+        json!(result)
+    })
+    .await
 }
 
-#[delete("/rustaceans/<_id>")]
-fn delete_rustacean(_id: i32, _auth: BasicAuth) -> status::NoContent {
-    status::NoContent
+#[delete("/rustaceans/<id>")]
+async fn delete_rustacean(id: i32, _auth: BasicAuth, db: DbConnection) -> status::NoContent {
+    db.run(move |c| {
+        diesel::delete(rustaceans::table.find(id))
+            .execute(c)
+            .expect("DB delete failed!");
+        status::NoContent
+    })
+    .await
 }
 
 #[catch(404)]

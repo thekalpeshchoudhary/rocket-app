@@ -7,10 +7,12 @@ mod repositories;
 mod schema;
 
 use auth::BasicAuth;
+use diesel::result::Error::NotFound;
 use models::{NewRustacean, Rustaceans};
 use repositories::RustaceanRepository;
 use rocket::{
-    response::status,
+    http::Status,
+    response::status::{self, Custom},
     serde::json::{json, Json, Value},
 };
 use rocket_sync_db_pools::database;
@@ -19,20 +21,31 @@ use rocket_sync_db_pools::database;
 struct DbConnection(diesel::PgConnection);
 
 #[get("/rustaceans")]
-async fn get_rustaceans(_auth: BasicAuth, db: DbConnection) -> Value {
+async fn get_rustaceans(_auth: BasicAuth, db: DbConnection) -> Result<Value, Custom<Value>> {
     db.run(|c| {
-        let rustaceans = RustaceanRepository::find_multiple(c, 1000).expect("DB Error");
-        json!(rustaceans)
+        RustaceanRepository::find_multiple(c, 1000)
+            .map(|rustaceans| json!(rustaceans))
+            .map_err(|e| match e {
+                NotFound => Custom(Status::NotFound, json!(e.to_string())),
+                _ => Custom(Status::InternalServerError, json!(e.to_string())),
+            })
     })
     .await
 }
 
 #[get("/rustaceans/<id>")]
-async fn view_rustaeans(id: i32, _auth: BasicAuth, db: DbConnection) -> Value {
+async fn view_rustaeans(
+    id: i32,
+    _auth: BasicAuth,
+    db: DbConnection,
+) -> Result<Value, Custom<Value>> {
     db.run(move |c| {
-        let rustacean =
-            RustaceanRepository::find(c, id).expect("DB error when selecting rustacean");
-        json!(rustacean)
+        RustaceanRepository::find(c, id)
+            .map(|rustacean| json!(rustacean))
+            .map_err(|e| match e {
+                NotFound => Custom(Status::NotFound, json!(e.to_string())),
+                _ => Custom(Status::InternalServerError, json!(e.to_string())),
+            })
     })
     .await
 }
@@ -42,11 +55,11 @@ async fn create_rustaceans(
     _auth: BasicAuth,
     db: DbConnection,
     new_rustacean: Json<NewRustacean>,
-) -> Value {
+) -> Result<Value, Custom<Value>> {
     db.run(|c| {
-        let result = RustaceanRepository::create(c, new_rustacean.into_inner())
-            .expect("DB insertion failed!");
-        json!(result)
+        RustaceanRepository::create(c, new_rustacean.into_inner())
+            .map(|rustacean| json!(rustacean))
+            .map_err(|e| Custom(Status::InternalServerError, json!(e.to_string())))
     })
     .await
 }
@@ -57,20 +70,29 @@ async fn update_rustaceans(
     _auth: BasicAuth,
     db: DbConnection,
     rustacean: Json<Rustaceans>,
-) -> Value {
+) -> Result<Value, Custom<Value>> {
     db.run(move |c| {
-        let result =
-            RustaceanRepository::update(c, id, rustacean.into_inner()).expect("DB update failed!");
-        json!(result)
+        RustaceanRepository::update(c, id, rustacean.into_inner())
+            .map(|rustacean| json!(rustacean))
+            .map_err(|e| Custom(Status::InternalServerError, json!(e.to_string())))
     })
     .await
 }
 
 #[delete("/rustaceans/<id>")]
-async fn delete_rustacean(id: i32, _auth: BasicAuth, db: DbConnection) -> status::NoContent {
+async fn delete_rustacean(
+    id: i32,
+    _auth: BasicAuth,
+    db: DbConnection,
+) -> Result<status::NoContent, Custom<Value>> {
     db.run(move |c| {
-        RustaceanRepository::delete(c, id).expect("DB delete failed!");
-        status::NoContent
+        let rustacean_found = RustaceanRepository::find(c, id);
+        match rustacean_found {
+            Ok(_) => RustaceanRepository::delete(c, id)
+                .map(|_| status::NoContent)
+                .map_err(|e| Custom(Status::InternalServerError, json!(e.to_string()))),
+            Err(_) => Err(Custom(Status::NotFound, json!("Rustacean not found"))),
+        }
     })
     .await
 }
